@@ -1,0 +1,577 @@
+<script setup>
+import { ref, onMounted, computed } from "vue";
+import api from "../../api";
+import CurrencyInput from "../../components/CurrencyInput.vue";
+import ConfirmDialog from "../../components/ConfirmDialog.vue";
+
+const MONTHS = [
+    "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+    "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+];
+
+const mode = ref("list"); // "list" | "edit"
+const mitraList = ref([]);
+const categories = ref([]);
+const allKatalog = ref([]);
+
+// LIST mode
+const pricelists = ref([]);
+const listLoading = ref(false);
+
+// EDIT mode
+const selectedMitraId = ref("");
+const selectedYear = ref(new Date().getFullYear());
+const selectedMonth = ref(new Date().getMonth() + 1);
+const selectedPeriode = ref(1);
+const editLoading = ref(false);
+const saving = ref(false);
+const editError = ref("");
+const currentPricelistId = ref(null);
+const editMitraNama = ref("");
+
+const editItems = ref([]);
+const filterCategoryId = ref("");
+
+const showDeleteConfirm = ref(false);
+const deleteId = ref(null);
+const deleting = ref(false);
+
+// Add item modal
+const showAddModal = ref(false);
+const addSearchQuery = ref("");
+
+function formatCurrency(val) {
+    return new Intl.NumberFormat("id-ID", {
+        style: "currency",
+        currency: "IDR",
+        minimumFractionDigits: 0,
+    }).format(val || 0);
+}
+
+function formatDate(dateStr) {
+    if (!dateStr) return "-";
+    const [y, m, d] = dateStr.split("-");
+    return `${d}-${m}-${y}`;
+}
+
+const lastDayOfMonth = computed(() => new Date(selectedYear.value, selectedMonth.value, 0).getDate());
+
+const periodeOptions = computed(() => [
+    { value: 1, label: `Periode 1 (1-15 ${MONTHS[selectedMonth.value - 1]})` },
+    { value: 2, label: `Periode 2 (16-${lastDayOfMonth.value} ${MONTHS[selectedMonth.value - 1]})` },
+]);
+
+function getPeriodeLabel(bulan, periode, tahun) {
+    const lastDay = new Date(tahun, bulan, 0).getDate();
+    const range = periode === 1 ? `1-15` : `16-${lastDay}`;
+    return `Periode ${periode} (${range} ${MONTHS[bulan - 1]})`;
+}
+
+const periodLabel = computed(() => {
+    const mitra = mitraList.value.find(m => m.id == selectedMitraId.value);
+    const opt = periodeOptions.value.find(o => o.value === selectedPeriode.value);
+    return `${mitra?.nama || ""} - ${MONTHS[selectedMonth.value - 1]} ${selectedYear.value} — ${opt?.label || ""}`;
+});
+
+const filteredEditItems = computed(() => {
+    if (!filterCategoryId.value) return editItems.value;
+    return editItems.value.filter(i => i.category_id == filterCategoryId.value);
+});
+
+// Katalog items not yet in edit list
+const availableToAdd = computed(() => {
+    const existingIds = new Set(editItems.value.map(i => i.katalog_barang_id));
+    let list = allKatalog.value.filter(k => !existingIds.has(k.id));
+    if (addSearchQuery.value) {
+        const q = addSearchQuery.value.toLowerCase();
+        list = list.filter(k =>
+            k.nama_barang?.toLowerCase().includes(q) ||
+            k.kode_barang?.toLowerCase().includes(q)
+        );
+    }
+    return list;
+});
+
+onMounted(async () => {
+    await fetchList();
+    try {
+        const [mitraRes, catRes, katalogRes] = await Promise.all([
+            api.get("/mitra/all"),
+            api.get("/categories/all"),
+            api.get("/katalog-barang/all"),
+        ]);
+        mitraList.value = mitraRes.data.data;
+        categories.value = catRes.data.data;
+        allKatalog.value = katalogRes.data.data;
+    } catch (e) {
+        console.error("Gagal memuat referensi", e);
+    }
+});
+
+async function fetchList() {
+    listLoading.value = true;
+    try {
+        const { data } = await api.get("/pricelist/mitra");
+        pricelists.value = data.data.data || [];
+    } catch (e) {
+        console.error("Gagal memuat pricelist mitra", e);
+    } finally {
+        listLoading.value = false;
+    }
+}
+
+async function openPricelist() {
+    if (!selectedMitraId.value) {
+        editError.value = "Pilih mitra terlebih dahulu";
+        return;
+    }
+    editLoading.value = true;
+    editError.value = "";
+    try {
+        const { data } = await api.post("/pricelist/mitra/open", {
+            mitra_id: selectedMitraId.value,
+            tahun: selectedYear.value,
+            bulan: selectedMonth.value,
+            periode: selectedPeriode.value,
+        });
+        currentPricelistId.value = data.data.pricelist_id;
+        editMitraNama.value = mitraList.value.find(m => m.id == selectedMitraId.value)?.nama || "";
+        editItems.value = (data.data.items || []).map(item => ({
+            ...item,
+            persentase: item.persentase != null ? Number(item.persentase) : 0,
+            harga_jual: item.harga_jual != null ? Number(item.harga_jual) : 0,
+        }));
+        mode.value = "edit";
+    } catch (e) {
+        editError.value = e.response?.data?.message || "Gagal membuka price list mitra";
+    } finally {
+        editLoading.value = false;
+    }
+}
+
+function onPersentaseInput(item) {
+    const modal = Number(item.modal_rata_rata || 0);
+    if (modal > 0) {
+        item.harga_jual = Math.round(modal * (1 + item.persentase / 100) / 100) * 100;
+    }
+}
+
+function onHargaJualInput(item) {
+    const modal = Number(item.modal_rata_rata || 0);
+    if (modal > 0) {
+        item.persentase = Number((((item.harga_jual - modal) / modal) * 100).toFixed(2));
+    }
+}
+
+function removeItem(idx) {
+    editItems.value.splice(idx, 1);
+}
+
+function addItemFromKatalog(katalog) {
+    editItems.value.push({
+        katalog_barang_id: katalog.id,
+        kode_barang: katalog.kode_barang,
+        nama_barang: katalog.nama_barang,
+        unit: katalog.unit?.nama || "",
+        category_id: katalog.category_id,
+        modal_rata_rata: katalog.modal_rata_rata || 0,
+        persentase: 0,
+        harga_jual: 0,
+    });
+    showAddModal.value = false;
+    addSearchQuery.value = "";
+}
+
+async function savePricelist() {
+    saving.value = true;
+    editError.value = "";
+    try {
+        const items = editItems.value.map(item => ({
+            katalog_barang_id: item.katalog_barang_id,
+            modal_rata_rata: item.modal_rata_rata,
+            persentase: item.persentase,
+            harga_jual: item.harga_jual,
+        }));
+        await api.post(`/pricelist/mitra/${currentPricelistId.value}/items`, { items });
+        mode.value = "list";
+        await fetchList();
+    } catch (e) {
+        editError.value = e.response?.data?.message || "Gagal menyimpan";
+    } finally {
+        saving.value = false;
+    }
+}
+
+function confirmDelete(id) {
+    deleteId.value = id;
+    showDeleteConfirm.value = true;
+}
+
+async function doDelete() {
+    deleting.value = true;
+    try {
+        await api.delete(`/pricelist/mitra/${deleteId.value}`);
+        showDeleteConfirm.value = false;
+        await fetchList();
+    } catch (e) {
+        alert(e.response?.data?.message || "Gagal menghapus");
+    } finally {
+        deleting.value = false;
+    }
+}
+
+function backToList() {
+    mode.value = "list";
+    editItems.value = [];
+    currentPricelistId.value = null;
+    filterCategoryId.value = "";
+    fetchList();
+}
+</script>
+
+<template>
+    <div class="px-4 py-6 mx-auto space-y-6 md:px-8">
+        <!-- LIST MODE -->
+        <template v-if="mode === 'list'">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800">Price List Mitra</h1>
+                <p class="mt-1 text-sm text-slate-400">Kelola harga jual khusus per mitra per periode</p>
+            </div>
+
+            <!-- Selector Card -->
+            <div class="p-5 bg-white border shadow-sm rounded-xl border-slate-200">
+                <h3 class="mb-4 text-sm font-semibold text-slate-700">Buka Price List Mitra</h3>
+                <div class="flex flex-wrap items-end gap-3">
+                    <div class="flex flex-col gap-1">
+                        <label class="text-xs font-semibold text-slate-500">1. Mitra *</label>
+                        <div class="relative">
+                            <select
+                                v-model="selectedMitraId"
+                                class="appearance-none w-48 px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white pr-8"
+                            >
+                                <option value="" disabled>Pilih Mitra</option>
+                                <option v-for="m in mitraList" :key="m.id" :value="m.id">{{ m.nama }}</option>
+                            </select>
+                            <div class="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none text-slate-400">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex flex-col gap-1">
+                        <label class="text-xs font-semibold text-slate-500">2. Tahun</label>
+                        <input
+                            v-model.number="selectedYear"
+                            type="number"
+                            min="2020"
+                            max="2099"
+                            class="w-24 px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                        />
+                    </div>
+                    <div class="flex flex-col gap-1">
+                        <label class="text-xs font-semibold text-slate-500">3. Bulan</label>
+                        <div class="relative">
+                            <select
+                                v-model.number="selectedMonth"
+                                class="appearance-none w-36 px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white pr-8"
+                            >
+                                <option v-for="(m, i) in MONTHS" :key="i" :value="i + 1">{{ m }}</option>
+                            </select>
+                            <div class="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none text-slate-400">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex flex-col gap-1">
+                        <label class="text-xs font-semibold text-slate-500">4. Periode</label>
+                        <div class="relative">
+                            <select
+                                v-model.number="selectedPeriode"
+                                class="appearance-none w-64 px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white pr-8"
+                            >
+                                <option v-for="opt in periodeOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                            </select>
+                            <div class="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none text-slate-400">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+                    <button
+                        @click="openPricelist"
+                        :disabled="editLoading"
+                        class="px-5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-semibold rounded-lg hover:shadow-lg hover:shadow-blue-500/25 transition-all disabled:opacity-60 flex items-center gap-2"
+                    >
+                        <svg v-if="editLoading" class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        {{ editLoading ? "Memuat..." : "Buka Price List Mitra" }}
+                    </button>
+                </div>
+                <p v-if="editError" class="mt-2 text-sm text-red-500">{{ editError }}</p>
+            </div>
+
+            <!-- Existing Pricelists Table -->
+            <div class="overflow-hidden bg-white border shadow-sm rounded-xl border-slate-200">
+                <div class="px-5 py-3.5 border-b border-slate-200 bg-slate-50">
+                    <h3 class="text-sm font-semibold text-slate-700">Riwayat Price List Mitra</h3>
+                </div>
+                <div v-if="listLoading" class="flex justify-center py-8">
+                    <div class="w-6 h-6 border-2 border-slate-200 border-t-blue-500 rounded-full animate-spin"></div>
+                </div>
+                <div v-else class="table-container">
+                    <table class="table-fixed-layout">
+                        <thead class="table-header">
+                            <tr>
+                                <th class="w-12 text-center">No</th>
+                                <th class="text-left">Mitra</th>
+                                <th class="text-left">Tahun</th>
+                                <th class="text-left">Bulan</th>
+                                <th class="text-left">Periode</th>
+                                <th class="text-center">Jumlah Item</th>
+                                <th class="w-28 text-center">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-slate-200">
+                            <tr v-if="pricelists.length === 0">
+                                <td colspan="7" class="px-6 py-10 text-center text-slate-500 italic">Belum ada price list mitra.</td>
+                            </tr>
+                            <tr v-for="(pl, idx) in pricelists" :key="pl.id" class="table-row hover:bg-slate-50 transition">
+                                <td class="table-cell text-center text-slate-500">{{ idx + 1 }}</td>
+                                <td class="table-cell font-medium text-slate-700">{{ pl.mitra || "-" }}</td>
+                                <td class="table-cell text-slate-600">{{ pl.tahun }}</td>
+                                <td class="table-cell text-slate-600">{{ MONTHS[pl.bulan - 1] }}</td>
+                                <td class="table-cell">
+                                    <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+                                        {{ getPeriodeLabel(pl.bulan, pl.periode, pl.tahun) }}
+                                    </span>
+                                </td>
+                                <td class="table-cell text-center">
+                                    <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">
+                                        {{ pl.items_count || 0 }} item
+                                    </span>
+                                </td>
+                                <td class="table-cell text-center">
+                                    <div class="flex justify-center gap-1">
+                                        <button
+                                            @click="selectedMitraId = pl.mitra_id; selectedYear = pl.tahun; selectedMonth = pl.bulan; selectedPeriode = pl.periode; openPricelist()"
+                                            class="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                                            title="Buka / Edit"
+                                        >
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                            </svg>
+                                        </button>
+                                        <button
+                                            @click="confirmDelete(pl.id)"
+                                            class="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition"
+                                            title="Hapus"
+                                        >
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </template>
+
+        <!-- EDIT MODE -->
+        <template v-if="mode === 'edit'">
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div class="flex items-center gap-3">
+                    <button @click="backToList" class="p-2.5 hover:bg-slate-100 rounded-xl transition">
+                        <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                        </svg>
+                    </button>
+                    <div>
+                        <h1 class="text-xl font-bold text-slate-800">Price List Mitra - {{ periodLabel }}</h1>
+                        <p class="text-sm text-slate-400 mt-0.5">Edit harga jual khusus untuk mitra ini</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button
+                        @click="showAddModal = true"
+                        class="px-4 py-2 text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition flex items-center gap-1.5"
+                    >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                        </svg>
+                        Tambah Barang
+                    </button>
+                    <button @click="backToList" class="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition">Kembali</button>
+                    <button
+                        @click="savePricelist"
+                        :disabled="saving"
+                        class="px-5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-semibold rounded-lg hover:shadow-lg transition disabled:opacity-60"
+                    >{{ saving ? "Menyimpan..." : "Simpan" }}</button>
+                </div>
+            </div>
+
+            <p v-if="editError" class="text-sm text-red-500">{{ editError }}</p>
+
+            <!-- Category Filter -->
+            <div class="flex items-center gap-3">
+                <label class="text-sm font-medium text-slate-600">Filter Kategori:</label>
+                <div class="relative">
+                    <select
+                        v-model="filterCategoryId"
+                        class="appearance-none px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 outline-none bg-white min-w-[160px] pr-8"
+                    >
+                        <option value="">Semua Kategori</option>
+                        <option v-for="cat in categories" :key="cat.id" :value="cat.id">{{ cat.nama }}</option>
+                    </select>
+                    <div class="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none text-slate-400">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </div>
+                </div>
+                <span class="text-sm text-slate-400">{{ filteredEditItems.length }} produk</span>
+            </div>
+
+            <!-- Items Table -->
+            <div class="overflow-hidden bg-white border shadow-sm rounded-xl border-slate-200">
+                <div class="table-container">
+                    <table class="table-fixed-layout table-wide">
+                        <thead class="table-header">
+                            <tr>
+                                <th class="w-12 text-center">No</th>
+                                <th class="text-left">Kode Barang</th>
+                                <th class="text-left">Nama Barang</th>
+                                <th class="text-center">Satuan</th>
+                                <th class="text-right">Modal Rata-Rata</th>
+                                <th class="text-right w-32">Persentase (%)</th>
+                                <th class="text-right w-44">Harga Jual (Rp)</th>
+                                <th class="w-16 text-center">Hapus</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-slate-200">
+                            <tr v-if="filteredEditItems.length === 0">
+                                <td colspan="8" class="px-6 py-10 text-center text-slate-500 italic">
+                                    Belum ada barang. Klik "Tambah Barang" untuk menambahkan.
+                                </td>
+                            </tr>
+                            <tr
+                                v-for="(item, idx) in filteredEditItems"
+                                :key="item.katalog_barang_id"
+                                class="table-row hover:bg-slate-50 transition"
+                            >
+                                <td class="table-cell text-center text-slate-500">{{ idx + 1 }}</td>
+                                <td class="table-cell font-mono text-xs text-blue-600 font-semibold">{{ item.kode_barang }}</td>
+                                <td class="table-cell font-medium text-slate-700">{{ item.nama_barang }}</td>
+                                <td class="table-cell text-center text-slate-500">{{ item.unit }}</td>
+                                <td class="table-cell text-right text-slate-600">{{ formatCurrency(item.modal_rata_rata) }}</td>
+                                <td class="table-cell text-right">
+                                    <input
+                                        v-model.number="item.persentase"
+                                        @input="onPersentaseInput(item)"
+                                        type="number"
+                                        step="0.01"
+                                        class="w-full px-2 py-1.5 text-sm text-right border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-400 outline-none bg-slate-50/50"
+                                        placeholder="0"
+                                    />
+                                </td>
+                                <td class="table-cell text-right">
+                                    <CurrencyInput
+                                        v-model="item.harga_jual"
+                                        @update:modelValue="onHargaJualInput(item)"
+                                    />
+                                </td>
+                                <td class="table-cell text-center">
+                                    <button
+                                        @click="removeItem(editItems.indexOf(item))"
+                                        class="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition"
+                                        title="Hapus dari list"
+                                    >
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Bottom Save -->
+            <div class="flex justify-end gap-2">
+                <button @click="backToList" class="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition">Kembali</button>
+                <button
+                    @click="savePricelist"
+                    :disabled="saving"
+                    class="px-6 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-semibold rounded-lg hover:shadow-lg transition disabled:opacity-60"
+                >{{ saving ? "Menyimpan..." : "Simpan" }}</button>
+            </div>
+        </template>
+
+        <!-- Add Item Modal -->
+        <Teleport to="body">
+            <div
+                v-if="showAddModal"
+                class="fixed inset-0 z-50 flex items-center justify-center p-4"
+                @click.self="showAddModal = false"
+            >
+                <div class="fixed inset-0 bg-black/50"></div>
+                <div class="relative z-10 w-full max-w-lg p-6 bg-white shadow-2xl rounded-xl">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-semibold text-gray-900">Tambah Barang ke Price List</h3>
+                        <button @click="showAddModal = false" class="p-1.5 hover:bg-slate-100 rounded-lg transition">
+                            <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="relative mb-3">
+                        <input
+                            v-model="addSearchQuery"
+                            type="text"
+                            placeholder="Cari kode atau nama barang..."
+                            class="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                        />
+                        <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                            <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                        </div>
+                    </div>
+                    <ul class="max-h-72 overflow-y-auto divide-y divide-slate-100">
+                        <li v-if="availableToAdd.length === 0" class="py-8 text-center text-sm text-slate-500">Tidak ada barang tersedia</li>
+                        <li
+                            v-for="k in availableToAdd"
+                            :key="k.id"
+                            @click="addItemFromKatalog(k)"
+                            class="flex items-center justify-between px-3 py-2.5 cursor-pointer hover:bg-blue-50 transition rounded-lg"
+                        >
+                            <div>
+                                <span class="font-mono text-xs text-blue-600 font-semibold">{{ k.kode_barang }}</span>
+                                <span class="ml-2 text-sm font-medium text-slate-700">{{ k.nama_barang }}</span>
+                            </div>
+                            <span class="text-xs text-slate-400">{{ k.unit?.nama }}</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </Teleport>
+
+        <ConfirmDialog
+            :show="showDeleteConfirm"
+            :loading="deleting"
+            title="Hapus Price List Mitra"
+            message="Yakin ingin menghapus price list mitra ini?"
+            @confirm="doDelete"
+            @cancel="showDeleteConfirm = false"
+        />
+    </div>
+</template>

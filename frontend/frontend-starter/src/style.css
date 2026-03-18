@@ -1,0 +1,99 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+    .custom-scrollbar::-webkit-scrollbar {
+        width: 6px;
+        height: 8px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+        @apply bg-slate-50 rounded-full;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+        @apply bg-slate-200 rounded-full hover:bg-slate-300 transition-colors;
+    }
+
+    .glass {
+        @apply bg-white/80 backdrop-blur-lg border border-white/20;
+    }
+
+    /* Standard Table Container */
+    .table-container {
+        @apply w-full overflow-x-auto custom-scrollbar bg-white rounded-xl shadow-sm border border-slate-200;
+    }
+
+    /* Base Table Layout - ensures full width and fixed header alignment */
+    .table-fixed-layout {
+        @apply w-full border-collapse table-fixed min-w-full;
+    }
+
+    /* Wide table modifier - force scroll for many columns */
+    .table-wide {
+        @apply min-w-[1240px];
+    }
+
+    /* Standardized Header */
+    .table-header {
+        @apply bg-slate-50 border-b border-slate-200;
+    }
+
+    .table-header th {
+        @apply px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap align-middle text-left;
+    }
+
+    .table-row {
+        @apply hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0;
+    }
+
+    .table-cell {
+        @apply px-4 py-3 text-xs align-middle text-slate-700;
+    }
+
+    .table-header th.text-right {
+        text-align: right;
+    }
+
+    .table-header th.text-center {
+        text-align: center;
+    }
+
+    .table-cell.text-right {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+
+    .table-col-action-h {
+        @apply sticky right-0 z-20 w-36 px-4 py-3 text-center border-l bg-slate-50 border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider;
+    }
+
+    .table-col-action {
+        @apply sticky right-0 z-10 px-4 py-3 text-center bg-white border-l border-slate-100 group-hover:bg-slate-50;
+    }
+
+    .table-actions {
+        @apply flex items-center justify-center gap-2;
+    }
+}
+
+.animate-in-fade {
+    animation: fadeIn 0.3s ease-out;
+}
+
+table th.text-right,
+table td.text-right {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
