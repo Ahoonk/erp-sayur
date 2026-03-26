@@ -87,11 +87,22 @@ class PricelistRepository {
             ->groupBy('katalog_barang_id')
             ->select('katalog_barang_id', DB::raw('SUM(qty_sisa * harga_beli) / SUM(qty_sisa) as modal_rata_rata'))
             ->pluck('modal_rata_rata', 'katalog_barang_id');
+        $stockTotals = StockBatch::query()
+            ->whereIn('katalog_barang_id', $ids)
+            ->where('qty_sisa', '>', 0)
+            ->groupBy('katalog_barang_id')
+            ->select('katalog_barang_id', DB::raw('SUM(qty_sisa) as total_stok'))
+            ->pluck('total_stok', 'katalog_barang_id');
+        $lastPurchaseAt = StockBatch::query()
+            ->whereIn('katalog_barang_id', $ids)
+            ->groupBy('katalog_barang_id')
+            ->select('katalog_barang_id', DB::raw('MAX(created_at) as last_purchase_at'))
+            ->pluck('last_purchase_at', 'katalog_barang_id');
 
         // Existing items
         $existingItems = $pricelist->items->keyBy('katalog_barang_id');
 
-        $items = $katalogList->map(function ($k) use ($avgModals, $existingItems) {
+        $items = $katalogList->map(function ($k) use ($avgModals, $existingItems, $stockTotals, $lastPurchaseAt) {
             $existing = $existingItems->get($k->id);
             return [
                 'katalog_barang_id' => $k->id,
@@ -101,6 +112,8 @@ class PricelistRepository {
                 'category' => $k->category?->nama,
                 'unit' => $k->unit?->nama,
                 'modal_rata_rata' => round((float) ($avgModals->get($k->id) ?? 0), 2),
+                'stok' => (float) ($stockTotals->get($k->id) ?? 0),
+                'last_purchase_at' => $lastPurchaseAt->get($k->id),
                 'persentase' => $existing?->persentase !== null ? (float) $existing->persentase : null,
                 'harga_jual' => $existing ? (float) $existing->harga_jual : null,
                 'item_id' => $existing?->id,
@@ -194,10 +207,21 @@ class PricelistRepository {
             ->groupBy('katalog_barang_id')
             ->select('katalog_barang_id', DB::raw('SUM(qty_sisa * harga_beli) / SUM(qty_sisa) as modal_rata_rata'))
             ->pluck('modal_rata_rata', 'katalog_barang_id');
+        $stockTotals = StockBatch::query()
+            ->whereIn('katalog_barang_id', $ids)
+            ->where('qty_sisa', '>', 0)
+            ->groupBy('katalog_barang_id')
+            ->select('katalog_barang_id', DB::raw('SUM(qty_sisa) as total_stok'))
+            ->pluck('total_stok', 'katalog_barang_id');
+        $lastPurchaseAt = StockBatch::query()
+            ->whereIn('katalog_barang_id', $ids)
+            ->groupBy('katalog_barang_id')
+            ->select('katalog_barang_id', DB::raw('MAX(created_at) as last_purchase_at'))
+            ->pluck('last_purchase_at', 'katalog_barang_id');
 
         $existingItems = $pricelist->items->keyBy('katalog_barang_id');
 
-        $items = $katalogList->map(function ($k) use ($avgModals, $existingItems) {
+        $items = $katalogList->map(function ($k) use ($avgModals, $existingItems, $stockTotals, $lastPurchaseAt) {
             $existing = $existingItems->get($k->id);
             return [
                 'katalog_barang_id' => $k->id,
@@ -207,6 +231,8 @@ class PricelistRepository {
                 'category' => $k->category?->nama,
                 'unit' => $k->unit?->nama,
                 'modal_rata_rata' => round((float) ($avgModals->get($k->id) ?? 0), 2),
+                'stok' => (float) ($stockTotals->get($k->id) ?? 0),
+                'last_purchase_at' => $lastPurchaseAt->get($k->id),
                 'persentase' => $existing?->persentase !== null ? (float) $existing->persentase : null,
                 'harga_jual' => $existing ? (float) $existing->harga_jual : null,
                 'item_id' => $existing?->id,

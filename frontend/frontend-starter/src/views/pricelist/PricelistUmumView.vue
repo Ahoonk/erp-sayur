@@ -27,6 +27,7 @@ const currentPricelistId = ref(null);
 
 const editItems = ref([]);
 const filterCategoryId = ref("");
+const editSearchQuery = ref("");
 const editPerPage = ref(50);
 
 const editPagination = ref({
@@ -46,6 +47,33 @@ function formatCurrency(val) {
         currency: "IDR",
         minimumFractionDigits: 0,
     }).format(val || 0);
+}
+
+function formatNumber(val, decimals = 3) {
+    const num = Number(val || 0);
+    return new Intl.NumberFormat("id-ID", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: decimals,
+    }).format(num);
+}
+
+function timeAgo(dateStr) {
+    if (!dateStr) return "-";
+    const date = new Date(dateStr);
+    if (Number.isNaN(date.getTime())) return "-";
+    let diffSec = Math.floor((Date.now() - date.getTime()) / 1000);
+    if (diffSec < 5) return "baru saja";
+    if (diffSec < 60) return `${diffSec} detik lalu`;
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin} menit lalu`;
+    const diffHour = Math.floor(diffMin / 60);
+    if (diffHour < 24) return `${diffHour} jam lalu`;
+    const diffDay = Math.floor(diffHour / 24);
+    if (diffDay < 30) return `${diffDay} hari lalu`;
+    const diffMonth = Math.floor(diffDay / 30);
+    if (diffMonth < 12) return `${diffMonth} bulan lalu`;
+    const diffYear = Math.floor(diffMonth / 12);
+    return `${diffYear} tahun lalu`;
 }
 
 function formatDate(dateStr) {
@@ -73,8 +101,18 @@ const periodLabel = computed(() => {
 });
 
 const filteredEditItems = computed(() => {
-    if (!filterCategoryId.value) return editItems.value;
-    return editItems.value.filter(i => i.category_id == filterCategoryId.value);
+    let list = editItems.value;
+    if (filterCategoryId.value) {
+        list = list.filter(i => i.category_id == filterCategoryId.value);
+    }
+    if (editSearchQuery.value) {
+        const q = editSearchQuery.value.toLowerCase();
+        list = list.filter(i =>
+            i.nama_barang?.toLowerCase().includes(q) ||
+            i.kode_barang?.toLowerCase().includes(q)
+        );
+    }
+    return list;
 });
 
 onMounted(async () => {
@@ -114,6 +152,8 @@ async function openPricelist() {
             ...item,
             persentase: item.persentase != null ? Number(item.persentase) : 0,
             harga_jual: item.harga_jual != null ? Number(item.harga_jual) : 0,
+            stok: item.stok != null ? Number(item.stok) : 0,
+            last_purchase_at: item.last_purchase_at || null,
         }));
         mode.value = "edit";
     } catch (e) {
@@ -181,6 +221,7 @@ function backToList() {
     editItems.value = [];
     currentPricelistId.value = null;
     filterCategoryId.value = "";
+    editSearchQuery.value = "";
     fetchList();
 }
 </script>
@@ -379,6 +420,24 @@ function backToList() {
                 <span class="text-sm text-slate-400">{{ filteredEditItems.length }} produk ditampilkan</span>
             </div>
 
+            <!-- Search Item -->
+            <div class="flex items-center gap-3">
+                <label class="text-sm font-medium text-slate-600">Cari Barang:</label>
+                <div class="relative w-full max-w-md">
+                    <input
+                        v-model="editSearchQuery"
+                        type="text"
+                        placeholder="Cari kode atau nama barang..."
+                        class="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    />
+                    <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                        <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
             <!-- Items Table -->
             <div class="overflow-hidden bg-white border shadow-sm rounded-xl border-slate-200">
                 <div class="table-container">
@@ -389,6 +448,8 @@ function backToList() {
                                 <th class="text-left">Kode Barang</th>
                                 <th class="text-left">Nama Barang</th>
                                 <th class="text-center">Satuan</th>
+                                <th class="text-center">Stok</th>
+                                <th class="text-center">Update Pembelian</th>
                                 <th class="text-right">Modal Rata-Rata</th>
                                 <th class="text-right w-32">Persentase (%)</th>
                                 <th class="text-right w-44">Harga Jual (Rp)</th>
@@ -396,7 +457,7 @@ function backToList() {
                         </thead>
                         <tbody class="bg-white divide-y divide-slate-200">
                             <tr v-if="filteredEditItems.length === 0">
-                                <td colspan="7" class="px-6 py-10 text-center text-slate-500 italic">Tidak ada produk.</td>
+                                <td colspan="9" class="px-6 py-10 text-center text-slate-500 italic">Tidak ada produk.</td>
                             </tr>
                             <tr
                                 v-for="(item, idx) in filteredEditItems"
@@ -407,6 +468,14 @@ function backToList() {
                                 <td class="table-cell font-mono text-xs text-blue-600 font-semibold">{{ item.kode_barang }}</td>
                                 <td class="table-cell font-medium text-slate-700">{{ item.nama_barang }}</td>
                                 <td class="table-cell text-center text-slate-500">{{ item.unit }}</td>
+                                <td class="table-cell text-center">
+                                    <span :class="Number(item.stok) <= 0 ? 'text-rose-600 font-semibold' : 'text-slate-600'">
+                                        {{ formatNumber(item.stok, 3) }}
+                                    </span>
+                                </td>
+                                <td class="table-cell text-center text-xs text-slate-500">
+                                    {{ timeAgo(item.last_purchase_at) }}
+                                </td>
                                 <td class="table-cell text-right text-slate-600">{{ formatCurrency(item.modal_rata_rata) }}</td>
                                 <td class="table-cell text-right">
                                     <input

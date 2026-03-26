@@ -48,6 +48,33 @@ function formatCurrency(val) {
     }).format(val || 0);
 }
 
+function formatNumber(val, decimals = 3) {
+    const num = Number(val || 0);
+    return new Intl.NumberFormat("id-ID", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: decimals,
+    }).format(num);
+}
+
+function timeAgo(dateStr) {
+    if (!dateStr) return "-";
+    const date = new Date(dateStr);
+    if (Number.isNaN(date.getTime())) return "-";
+    let diffSec = Math.floor((Date.now() - date.getTime()) / 1000);
+    if (diffSec < 5) return "baru saja";
+    if (diffSec < 60) return `${diffSec} detik lalu`;
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin} menit lalu`;
+    const diffHour = Math.floor(diffMin / 60);
+    if (diffHour < 24) return `${diffHour} jam lalu`;
+    const diffDay = Math.floor(diffHour / 24);
+    if (diffDay < 30) return `${diffDay} hari lalu`;
+    const diffMonth = Math.floor(diffDay / 30);
+    if (diffMonth < 12) return `${diffMonth} bulan lalu`;
+    const diffYear = Math.floor(diffMonth / 12);
+    return `${diffYear} tahun lalu`;
+}
+
 function formatDate(dateStr) {
     if (!dateStr) return "-";
     const [y, m, d] = dateStr.split("-");
@@ -136,11 +163,18 @@ async function openPricelist() {
         });
         currentPricelistId.value = data.data.pricelist_id;
         editMitraNama.value = mitraList.value.find(m => m.id == selectedMitraId.value)?.nama || "";
-        editItems.value = (data.data.items || []).map(item => ({
+        const mappedItems = (data.data.items || []).map(item => ({
             ...item,
             persentase: item.persentase != null ? Number(item.persentase) : 0,
             harga_jual: item.harga_jual != null ? Number(item.harga_jual) : 0,
+            stok: item.stok != null ? Number(item.stok) : 0,
+            last_purchase_at: item.last_purchase_at || null,
+            selected: item.selected === true,
+            item_id: item.item_id ?? null,
         }));
+        // Saat pertama kali membuat pricelist, jangan tampilkan semua item.
+        // Tampilkan hanya item yang memang sudah dipilih/tersimpan.
+        editItems.value = mappedItems.filter(item => item.selected || item.item_id != null);
         mode.value = "edit";
     } catch (e) {
         editError.value = e.response?.data?.message || "Gagal membuka price list mitra";
@@ -175,6 +209,8 @@ function addItemFromKatalog(katalog) {
         unit: katalog.unit?.nama || "",
         category_id: katalog.category_id,
         modal_rata_rata: katalog.modal_rata_rata || 0,
+        stok: katalog.total_stok ?? katalog.stok ?? 0,
+        last_purchase_at: katalog.last_purchase_at || null,
         persentase: 0,
         harga_jual: 0,
     });
@@ -450,6 +486,8 @@ function backToList() {
                                 <th class="text-left">Kode Barang</th>
                                 <th class="text-left">Nama Barang</th>
                                 <th class="text-center">Satuan</th>
+                                <th class="text-center">Stok</th>
+                                <th class="text-center">Update Pembelian</th>
                                 <th class="text-right">Modal Rata-Rata</th>
                                 <th class="text-right w-32">Persentase (%)</th>
                                 <th class="text-right w-44">Harga Jual (Rp)</th>
@@ -458,7 +496,7 @@ function backToList() {
                         </thead>
                         <tbody class="bg-white divide-y divide-slate-200">
                             <tr v-if="filteredEditItems.length === 0">
-                                <td colspan="8" class="px-6 py-10 text-center text-slate-500 italic">
+                                <td colspan="10" class="px-6 py-10 text-center text-slate-500 italic">
                                     Belum ada barang. Klik "Tambah Barang" untuk menambahkan.
                                 </td>
                             </tr>
@@ -471,6 +509,14 @@ function backToList() {
                                 <td class="table-cell font-mono text-xs text-blue-600 font-semibold">{{ item.kode_barang }}</td>
                                 <td class="table-cell font-medium text-slate-700">{{ item.nama_barang }}</td>
                                 <td class="table-cell text-center text-slate-500">{{ item.unit }}</td>
+                                <td class="table-cell text-center">
+                                    <span :class="Number(item.stok) <= 0 ? 'text-rose-600 font-semibold' : 'text-slate-600'">
+                                        {{ formatNumber(item.stok, 3) }}
+                                    </span>
+                                </td>
+                                <td class="table-cell text-center text-xs text-slate-500">
+                                    {{ timeAgo(item.last_purchase_at) }}
+                                </td>
                                 <td class="table-cell text-right text-slate-600">{{ formatCurrency(item.modal_rata_rata) }}</td>
                                 <td class="table-cell text-right">
                                     <input

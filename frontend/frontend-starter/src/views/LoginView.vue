@@ -53,14 +53,14 @@ onMounted(fetchStoreProfile);
 
 <template>
     <div
-        class="flex flex-col justify-center min-h-screen px-4 py-12 font-sans bg-gradient-to-br from-blue-50 via-gray-50 to-white sm:px-6 lg:px-8"
+        class="flex flex-col justify-center min-h-screen px-4 py-12 font-sans bg-gradient-to-br from-emerald-50 via-gray-50 to-white sm:px-6 lg:px-8"
     >
         <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
             <div
-                class="relative px-4 py-8 bg-white border border-gray-100 shadow-2xl shadow-blue-900/5 rounded-3xl sm:py-12 sm:px-12"
+                class="relative px-4 py-8 bg-white border border-gray-100 shadow-2xl shadow-emerald-900/5 rounded-3xl sm:py-12 sm:px-12"
             >
                 <div
-                    class="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-t-3xl"
+                    class="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-green-500 to-emerald-600 rounded-t-3xl"
                 ></div>
 
                 <div class="mb-8 sm:mx-auto sm:w-full sm:max-w-md">
@@ -73,7 +73,7 @@ onMounted(fetchStoreProfile);
                         />
                         <div
                             v-else
-                            class="flex items-center justify-center w-20 h-20 text-white shadow-lg bg-gradient-to-tr from-blue-600 to-indigo-500 rounded-2xl shadow-blue-500/30"
+                            class="flex items-center justify-center w-20 h-20 text-white shadow-lg bg-gradient-to-tr from-green-600 to-emerald-500 rounded-2xl shadow-emerald-500/30"
                         >
                             <svg
                                 class="w-10 h-10"
@@ -94,7 +94,7 @@ onMounted(fetchStoreProfile);
                     <h2
                         class="mt-6 text-2xl font-extrabold tracking-tight text-center text-gray-900 sm:text-3xl"
                     >
-                        Selamat Datang
+                        CV DHAROES PUTRA
                     </h2>
                     <p class="mt-2 text-sm text-center text-gray-500">
                         Silakan masuk ke akun Anda untuk melanjutkan
@@ -151,7 +151,7 @@ onMounted(fetchStoreProfile);
                                 type="text"
                                 autocomplete="username"
                                 required
-                                class="block w-full py-3 pl-10 pr-3 text-sm text-gray-900 transition duration-200 border border-gray-300 rounded-xl bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-gray-400"
+                                class="block w-full py-3 pl-10 pr-3 text-sm text-gray-900 transition duration-200 border border-gray-300 rounded-xl bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent placeholder:text-gray-400"
                                 placeholder="username"
                             />
                         </div>
@@ -189,7 +189,7 @@ onMounted(fetchStoreProfile);
                                 :type="showPassword ? 'text' : 'password'"
                                 autocomplete="current-password"
                                 required
-                                class="block w-full py-3 pl-10 pr-10 text-sm text-gray-900 transition duration-200 border border-gray-300 rounded-xl bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-gray-400"
+                                class="block w-full py-3 pl-10 pr-10 text-sm text-gray-900 transition duration-200 border border-gray-300 rounded-xl bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent placeholder:text-gray-400"
                                 placeholder="••••••••"
                             />
 
@@ -242,7 +242,7 @@ onMounted(fetchStoreProfile);
                                 id="remember-me"
                                 name="remember-me"
                                 type="checkbox"
-                                class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                class="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
                             />
                             <label
                                 for="remember-me"
@@ -255,7 +255,7 @@ onMounted(fetchStoreProfile);
                         <div class="text-sm">
                             <a
                                 href="#"
-                                class="font-semibold text-blue-600 transition-colors hover:text-blue-500"
+                                class="font-semibold text-emerald-600 transition-colors hover:text-emerald-500"
                             >
                                 Lupa password?
                             </a>
@@ -266,7 +266,7 @@ onMounted(fetchStoreProfile);
                         <button
                             type="submit"
                             :disabled="authStore.loading"
-                            class="relative flex justify-center w-full px-4 py-3.5 text-sm font-bold text-white transition-all bg-gradient-to-r from-blue-600 to-indigo-600 border border-transparent rounded-xl shadow-lg hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-70 disabled:cursor-not-allowed transform active:scale-[0.98]"
+                            class="relative flex justify-center w-full px-4 py-3.5 text-sm font-bold text-white transition-all bg-gradient-to-r from-green-600 to-emerald-600 border border-transparent rounded-xl shadow-lg hover:from-green-700 hover:to-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-70 disabled:cursor-not-allowed transform active:scale-[0.98]"
                         >
                             <span
                                 v-if="authStore.loading"

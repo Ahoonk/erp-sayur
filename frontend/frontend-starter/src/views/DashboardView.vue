@@ -185,7 +185,7 @@ onUnmounted(() => {
                             <router-link
                                 to="/dashboard/purchases"
                                 class="dropdown-item"
-                                >Pembelian (Invoice)</router-link
+                                >Pembelian (Stock In)</router-link
                             >
                             <router-link
                                 to="/dashboard/stock"
@@ -630,7 +630,7 @@ onUnmounted(() => {
                                     to="/dashboard/purchases"
                                     class="mobile-sublink"
                                     :class="{ 'mobile-sublink-active': $route.path.includes('/dashboard/purchases') }"
-                                    >Pembelian (Invoice)</router-link
+                                    >Pembelian (Stock In)</router-link
                                 >
                                 <router-link
                                     @click="mobileMenuOpen = false"
